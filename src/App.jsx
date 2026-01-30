@@ -165,39 +165,45 @@ function Dashboard() {
       if (res.ok) setUser({ ...user, balance: data.newBalance });
     } catch (err) { alert("Connection Error"); }
   };
+const withdrawMoney = async () => {
+    // 1. SAFETY CHECK: Get User directly from storage
+    const storedUser = JSON.parse(localStorage.getItem('user'));
 
-  // NEW: WITHDRAW FUNCTION
-  const withdrawMoney = async () => {
-    if (!user) return;
+    if (!storedUser || !storedUser.phone) {
+      alert("System Error: Phone number missing. Please Logout and Login again.");
+      return;
+    }
+
+    if (!amount) {
+      alert("Please enter an amount!");
+      return;
+    }
+
     try {
+      // 2. SEND DATA (Make sure this URL matches your real backend!)
       const res = await fetch('https://project-k-backend-1.onrender.com/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: user.username, amount: withdrawAmount })
+        body: JSON.stringify({ 
+          phone: storedUser.phone,  // <--- This is the fix!
+          amount: amount 
+        }),
       });
+
       const data = await res.json();
-      if (res.ok) {
-        alert("Withdrawal Successful!");
-        setUser({ ...user, balance: data.newBalance });
-        setWithdrawAmount('');
+
+      if (data.success) {
+        setBalance(data.newBalance); // Update screen immediately
+        alert("✅ Cash Out Successful!");
+        setAmount(''); // Clear the box
       } else {
-        alert(data.message);
+        alert("❌ Withdrawal Failed: " + data.message);
       }
-    } catch (err) { alert("Connection Error"); }
+    } catch (error) {
+      console.error(error);
+      alert("Connection Error. Check your internet.");
+    }
   };
-
-  const findMatch = () => {
-    if (user.balance < 10) return alert("Insufficient Funds! Please Deposit.");
-    socket.emit('FIND_MATCH', { gameType: 'DICE', stake: 10, userId: user.id });
-    setGameState('SEARCHING');
-  };
-
-  const rollDice = () => {
-    if (!matchId) return;
-    socket.emit('ROLL_DICE', { matchId });
-  };
-
-  if (!user) return <h2 style={{color:'white', textAlign:'center', marginTop:'50px'}}>Loading...</h2>;
 
   // --- VIEW: GAME SCREEN ---
   if (gameState === 'PLAYING' || gameState === 'GAME_OVER') {
