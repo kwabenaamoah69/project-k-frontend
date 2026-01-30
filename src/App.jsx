@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import io from 'socket.io-client';
-import './App.css'; // <--- Importing the new look!
+import './App.css'; 
 
-const BACKEND_URL = "https://project-k-backend-1.onrender.com";
+const BACKEND_URL = "https://project-k-backend-1.onrender.com"; // CHECK THIS LINK!
 const socket = io(BACKEND_URL);
 
 function App() {
@@ -14,38 +14,46 @@ function App() {
   // Game States
   const [gameState, setGameState] = useState('IDLE'); 
   const [matchId, setMatchId] = useState(null);
-  const [roll, setRoll] = useState(null);
-  const [isRolling, setIsRolling] = useState(false); // Controls animation
+  const [myRoll, setMyRoll] = useState(null);
+  const [opRoll, setOpRoll] = useState(null);
+  const [resultMsg, setResultMsg] = useState("");
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) setUser(JSON.parse(storedUser));
 
-    // SOCKET LISTENERS
-    socket.on('WAITING', () => setGameState('WAITING'));
-    
+    // GAME LISTENERS
     socket.on('GAME_START', ({ matchId }) => {
       setGameState('PLAYING');
       setMatchId(matchId);
-      setRoll(null);
+      setMyRoll(null);
+      setOpRoll(null);
+      setResultMsg("");
     });
 
-    socket.on('ROLL_RESULT', ({ roll }) => {
-      // 1. Start Animation
-      setIsRolling(true);
-      setRoll(null); // Hide number while rolling
+    socket.on('ROLL_ANIMATION', () => {
+      // Just a visual cue that someone rolled
+      console.log("Someone is rolling...");
+    });
 
-      // 2. Stop Animation after 1 second & Show Number
+    socket.on('GAME_OVER', ({ myRoll, opRoll, result }) => {
+      setMyRoll(myRoll);
+      setOpRoll(opRoll);
+      setResultMsg(result);
+      setGameState('FINISHED');
+      
+      // Refresh Balance after 3 seconds
       setTimeout(() => {
-        setIsRolling(false);
-        setRoll(roll);
-      }, 1000);
+        window.location.reload(); 
+      }, 4000);
     });
+
+    socket.on('ERROR', (data) => alert(data.message));
 
     return () => socket.off(); 
   }, []);
 
-  // --- FUNCTIONS ---
+  // --- ACTIONS ---
 
   const handleAuth = async () => {
     const endpoint = isLogin ? '/login' : '/register';
@@ -61,55 +69,46 @@ function App() {
         localStorage.setItem('user', JSON.stringify(userData));
         setUser(userData);
       } else {
-        alert(data.error || "Auth Failed");
+        alert(data.error);
       }
-    } catch (err) { alert("Connection Error"); }
+    } catch (err) { alert("Server Connection Failed"); }
   };
 
-  const logout = () => {
-    localStorage.removeItem('user');
-    setUser(null);
-    setGameState('IDLE');
-  };
-
-  const withdrawMoney = async () => {
-    if (!user) return;
+  const updateBalance = async (type) => {
+    if (!amount) return alert("Enter amount");
     try {
-      const res = await fetch(`${BACKEND_URL}/withdraw`, {
+      const res = await fetch(`${BACKEND_URL}/${type}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: user.phone, amount }),
       });
       const data = await res.json();
       if (data.success) {
-        const updatedUser = { ...user, balance: data.newBalance };
-        setUser(updatedUser);
-        localStorage.setItem('user', JSON.stringify(updatedUser));
-        setAmount('');
-        alert("✅ Cash Out Successful!");
+        alert(`✅ ${type.toUpperCase()} Successful!`);
+        window.location.reload(); // Reload to show new balance
       } else {
-        alert("❌ " + data.message);
+        alert("❌ Failed: " + data.message);
       }
-    } catch (err) { alert("Error connecting to server"); }
+    } catch (err) { alert("Connection Error"); }
+  };
+
+  const findMatch = () => {
+    socket.emit('FIND_MATCH', { phone: user.phone });
+    setGameState('WAITING');
   };
 
   // --- RENDER ---
-  
   if (!user) {
     return (
       <div className="app-container">
-        <h1 className="gold-text">KUMASI CASINO 🎲</h1> {/* CHANGE NAME HERE */}
+        <h1 className="gold-text">KUMASI CASINO 🎲</h1>
         <br/>
         {!isLogin && <input placeholder="Username" onChange={e => setForm({...form, username: e.target.value})} />}
         <input placeholder="Phone Number" onChange={e => setForm({...form, phone: e.target.value})} />
         <input type="password" placeholder="Password" onChange={e => setForm({...form, password: e.target.value})} />
-        
-        <button className="btn-gold" onClick={handleAuth}>
-          {isLogin ? "ENTER" : "CREATE ACCOUNT"}
-        </button>
-        
-        <p style={{marginTop: '20px', color: '#888'}} onClick={() => setIsLogin(!isLogin)}>
-          {isLogin ? "New here? Register" : "Have an account? Login"}
+        <button className="btn-gold" onClick={handleAuth}>{isLogin ? "ENTER" : "REGISTER"}</button>
+        <p style={{color:'#888', marginTop:'20px'}} onClick={() => setIsLogin(!isLogin)}>
+          {isLogin ? "Create Account" : "Login"}
         </p>
       </div>
     );
@@ -117,48 +116,44 @@ function App() {
 
   return (
     <div className="app-container">
-      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-        <h3 style={{margin:0}}>{user.username}</h3>
-        <button onClick={logout} style={{background:'none', border:'none', color:'#555'}}>Logout</button>
+      <div style={{display:'flex', justifyContent:'space-between'}}>
+        <h3 style={{color:'#888'}}>{user.username}</h3>
+        <button onClick={() => {localStorage.clear(); window.location.reload()}} style={{background:'none', border:'none', color:'red'}}>Logout</button>
       </div>
-
+      
       <h1 className="gold-text">GHS {user.balance}</h1>
 
-      {/* BANKING */}
       <div className="action-box">
         <input type="number" placeholder="Amount" value={amount} onChange={e => setAmount(e.target.value)} />
         <div style={{display:'flex', gap:'10px', marginTop:'10px'}}>
-          <button className="btn-small deposit" style={{flex:1}}>Deposit</button>
-          <button className="btn-small withdraw" style={{flex:1}} onClick={withdrawMoney}>Cash Out</button>
+          <button className="btn-small deposit" onClick={() => updateBalance('deposit')}>DEPOSIT</button>
+          <button className="btn-small withdraw" onClick={() => updateBalance('withdraw')}>CASH OUT</button>
         </div>
       </div>
 
-      {/* GAME AREA */}
       <div style={{marginTop: '40px'}}>
         {gameState === 'IDLE' && (
-          <button className="btn-gold" onClick={() => socket.emit('FIND_MATCH')}>
-            FIND MATCH (GHS 10)
-          </button>
+          <button className="btn-gold" onClick={findMatch}>FIND MATCH (10 GHS)</button>
         )}
 
-        {gameState === 'WAITING' && <h3 className="gold-text" style={{animation: 'pulse 1s infinite'}}>🔎 Searching...</h3>}
+        {gameState === 'WAITING' && <h3 className="gold-text">🔎 Searching for Opponent...</h3>}
 
         {gameState === 'PLAYING' && (
           <div>
-            <h3>Match Found!</h3>
-            
-            <div className="dice-box">
-              {/* If rolling, show shaking dice emoji. If done, show number */}
-              {isRolling ? (
-                <div className="dice shaking">🎲</div>
-              ) : (
-                <div className="dice">{roll ? roll : "❓"}</div>
-              )}
-            </div>
+            <h3>Game On!</h3>
+            <div className="dice-box"><div className="dice shaking">🎲</div></div>
+            <button className="btn-gold" onClick={() => socket.emit('ROLL_DICE', { matchId })}>ROLL!</button>
+          </div>
+        )}
 
-            <button className="btn-gold" onClick={() => socket.emit('ROLL_DICE', { matchId })}>
-              ROLL DICE
-            </button>
+        {gameState === 'FINISHED' && (
+          <div>
+            <h2 className="gold-text">{resultMsg}</h2>
+            <div style={{display:'flex', justifyContent:'space-around', fontSize:'30px'}}>
+              <div>You: {myRoll}</div>
+              <div>Them: {opRoll}</div>
+            </div>
+            <p>Restarting...</p>
           </div>
         )}
       </div>
