@@ -132,7 +132,7 @@ function App() {
     // LOGIN / REGISTER SCREEN
     return (
       <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#1a1a1a', color: 'white', minHeight: '100vh' }}>
-        <h1>Dice King 🎲</h1>
+        <h1>AEONS GAMES 🎲</h1>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px', margin: 'auto' }}>
           {!isLogin && (
             <input 
