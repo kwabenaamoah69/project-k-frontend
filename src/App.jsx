@@ -95,6 +95,7 @@ const handleRegister = async () => {
 function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
   
   // Game States
   const [gameState, setGameState] = useState('IDLE'); // IDLE, SEARCHING, PLAYING, GAME_OVER
@@ -157,6 +158,25 @@ const res = await fetch('https://project-k-backend-1.onrender.com/deposit', {
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ phone: user.phone, amount: 50 })
 });
+
+const withdrawMoney = async () => {
+    if (!user) return;
+    try {
+      const res = await fetch('https://project-k-backend-1.onrender.com/withdraw', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username: user.username, amount: withdrawAmount })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        alert("Withdrawal Successful!");
+        setUser({ ...user, balance: data.newBalance });
+        setWithdrawAmount('');
+      } else {
+        alert(data.message);
+      }
+    } catch (err) { alert("Connection Error"); }
+  };
       const data = await res.json();
       if (res.ok) setUser({ ...user, balance: data.newBalance });
     } catch (err) { alert("Connection Error"); }
@@ -218,6 +238,19 @@ const res = await fetch('https://project-k-backend-1.onrender.com/deposit', {
         <p style={{color: '#94a3b8'}}>Balance</p>
         <h2 style={{fontSize: '3rem', margin: '10px 0', color: 'white'}}>GHS {user.balance}</h2>
         <button onClick={handleDeposit} style={{...styles.btnOutline, fontSize:'0.9rem', padding:'10px'}}>+ DEPOSIT 50 GHS</button>
+      </div>
+
+      {/* NEW WITHDRAW SECTION */}
+      <div style={styles.card}>
+        <h3 style={{color: '#ef4444'}}>📉 Withdraw</h3>
+        <input 
+          type="number" 
+          placeholder="Amount (GHS)" 
+          value={withdrawAmount}
+          onChange={(e) => setWithdrawAmount(e.target.value)}
+          style={{...styles.input, marginBottom: '5px'}} 
+        />
+        <button onClick={withdrawMoney} style={styles.btnRed}>CASH OUT</button>
       </div>
 
       {gameState === 'IDLE' && (
