@@ -3,7 +3,9 @@ import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
 import io from 'socket.io-client';
 
 // --- CONNECT TO GAME SERVER ---
-const socket = io('https://project-k-backend-1.onrender.com');
+// Make sure this matches your Render URL exactly
+const socket = io('https://project-k-api.onrender.com');
+
 // --- STYLES ---
 const styles = {
   container: { textAlign: 'center', padding: '20px', maxWidth: '400px', margin: '0 auto', color: 'white', fontFamily: 'sans-serif' },
@@ -33,17 +35,17 @@ function Login() {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
-const handleLogin = async () => {
-  try {
-    const res = await fetch('https://project-k-backend-1.onrender.com/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone, password })
-    });
+  const handleLogin = async () => {
+    try {
+      const res = await fetch('https://project-k-api.onrender.com/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone, password })
+      });
       const data = await res.json();
       if (res.ok) {
         localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user)); // Saves Phone & Balance
+        localStorage.setItem('user', JSON.stringify(data.user)); 
         navigate('/dashboard');
       } else { alert(data.error); }
     } catch (err) { alert("Server Error"); }
@@ -67,13 +69,13 @@ function Register() {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
 
-const handleRegister = async () => {
-  try {
-    const res = await fetch('https://project-k-backend-1.onrender.com/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, phone, password })
-    });
+  const handleRegister = async () => {
+    try {
+      const res = await fetch('https://project-k-api.onrender.com/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, phone, password })
+      });
       if (res.ok) { alert("Success! Login now."); navigate('/login'); }
       else { const data = await res.json(); alert(data.error); }
     } catch (err) { alert("Server Error"); }
@@ -95,10 +97,12 @@ const handleRegister = async () => {
 function Dashboard() {
   const navigate = useNavigate();
   const [user, setUser] = useState(null);
-  const [withdrawAmount, setWithdrawAmount] = useState('');
   
+  // NEW: Withdraw State
+  const [withdrawAmount, setWithdrawAmount] = useState('');
+
   // Game States
-  const [gameState, setGameState] = useState('IDLE'); // IDLE, SEARCHING, PLAYING, GAME_OVER
+  const [gameState, setGameState] = useState('IDLE'); 
   const [matchId, setMatchId] = useState(null);
   const [myRoll, setMyRoll] = useState(null);
   const [opponentRoll, setOpponentRoll] = useState(null);
@@ -110,9 +114,9 @@ function Dashboard() {
       const token = localStorage.getItem('token');
       if (!token) return navigate('/login');
       
-const res = await fetch('https://project-k-backend-1.onrender.com/me', {
-  headers: { 'Authorization': token }
-});
+      const res = await fetch('https://project-k-api.onrender.com/me', {
+        headers: { 'Authorization': token }
+      });
       if (res.ok) {
         const userData = await res.json();
         setUser(userData);
@@ -131,7 +135,6 @@ const res = await fetch('https://project-k-backend-1.onrender.com/me', {
       setMatchId(data.matchId);
       setGameState('PLAYING');
       setMyRoll(null); setOpponentRoll(null); setGameResult('');
-      // Deduct money visually immediately
       if(user) setUser(prev => ({...prev, balance: prev.balance - 10})); 
     });
 
@@ -143,26 +146,31 @@ const res = await fetch('https://project-k-backend-1.onrender.com/me', {
     socket.on('GAME_OVER', (data) => {
       setGameResult(data.message);
       setGameState('GAME_OVER');
-      // Refresh balance after 2 seconds to show winnings
       setTimeout(() => window.location.reload(), 3000);
     });
 
-    return () => socket.off(); // Cleanup
+    return () => socket.off(); 
   }, [user]);
 
+  // DEPOSIT FUNCTION
   const handleDeposit = async () => {
     if (!user) return;
     try {
-const res = await fetch('https://project-k-backend-1.onrender.com/deposit', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ phone: user.phone, amount: 50 })
-});
+      const res = await fetch('https://project-k-api.onrender.com/deposit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: user.phone, amount: 50 })
+      });
+      const data = await res.json();
+      if (res.ok) setUser({ ...user, balance: data.newBalance });
+    } catch (err) { alert("Connection Error"); }
+  };
 
-const withdrawMoney = async () => {
+  // NEW: WITHDRAW FUNCTION
+  const withdrawMoney = async () => {
     if (!user) return;
     try {
-      const res = await fetch('https://project-k-backend-1.onrender.com/withdraw', {
+      const res = await fetch('https://project-k-api.onrender.com/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: user.username, amount: withdrawAmount })
@@ -177,10 +185,6 @@ const withdrawMoney = async () => {
       }
     } catch (err) { alert("Connection Error"); }
   };
-      const data = await res.json();
-      if (res.ok) setUser({ ...user, balance: data.newBalance });
-    } catch (err) { alert("Connection Error"); }
-  };
 
   const findMatch = () => {
     if (user.balance < 10) return alert("Insufficient Funds! Please Deposit.");
@@ -193,7 +197,7 @@ const withdrawMoney = async () => {
     socket.emit('ROLL_DICE', { matchId });
   };
 
-  if (!user) return <h2 style={{color:'white', textAlign:'center'}}>Loading...</h2>;
+  if (!user) return <h2 style={{color:'white', textAlign:'center', marginTop:'50px'}}>Loading...</h2>;
 
   // --- VIEW: GAME SCREEN ---
   if (gameState === 'PLAYING' || gameState === 'GAME_OVER') {
@@ -234,13 +238,14 @@ const withdrawMoney = async () => {
     <div style={styles.container}>
       <h1 style={{color: '#fbbf24'}}>HELLO, {user.username}</h1>
       
+      {/* BALANCE CARD */}
       <div style={styles.card}>
         <p style={{color: '#94a3b8'}}>Balance</p>
         <h2 style={{fontSize: '3rem', margin: '10px 0', color: 'white'}}>GHS {user.balance}</h2>
         <button onClick={handleDeposit} style={{...styles.btnOutline, fontSize:'0.9rem', padding:'10px'}}>+ DEPOSIT 50 GHS</button>
       </div>
 
-      {/* NEW WITHDRAW SECTION */}
+      {/* NEW: WITHDRAW CARD */}
       <div style={styles.card}>
         <h3 style={{color: '#ef4444'}}>📉 Withdraw</h3>
         <input 
