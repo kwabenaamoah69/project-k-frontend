@@ -4,7 +4,7 @@ import io from 'socket.io-client';
 
 // --- CONNECT TO GAME SERVER ---
 // Make sure this matches your Render URL exactly
-const socket = io('https://project-k-api.onrender.com');
+const socket = io('https://project-k-backend-1.onrender.com');
 
 // --- STYLES ---
 const styles = {
@@ -37,7 +37,7 @@ function Login() {
 
   const handleLogin = async () => {
     try {
-      const res = await fetch('https://project-k-api.onrender.com/login', {
+      const res = await fetch('https://project-k-backend-1.onrender.com/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone, password })
@@ -71,7 +71,7 @@ function Register() {
 
   const handleRegister = async () => {
     try {
-      const res = await fetch('https://project-k-api.onrender.com/register', {
+      const res = await fetch('https://project-k-backend-1.onrender.com/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, phone, password })
@@ -114,7 +114,7 @@ function Dashboard() {
       const token = localStorage.getItem('token');
       if (!token) return navigate('/login');
       
-      const res = await fetch('https://project-k-api.onrender.com/me', {
+      const res = await fetch('https://project-k-backend-1.onrender.com/me', {
         headers: { 'Authorization': token }
       });
       if (res.ok) {
@@ -156,7 +156,7 @@ function Dashboard() {
   const handleDeposit = async () => {
     if (!user) return;
     try {
-      const res = await fetch('https://project-k-api.onrender.com/deposit', {
+      const res = await fetch('https://project-k-backend-1.onrender.com/deposit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone: user.phone, amount: 50 })
@@ -170,7 +170,7 @@ function Dashboard() {
   const withdrawMoney = async () => {
     if (!user) return;
     try {
-      const res = await fetch('https://project-k-api.onrender.com/withdraw', {
+      const res = await fetch('https://project-k-backend-1.onrender.com/withdraw', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: user.username, amount: withdrawAmount })
