@@ -1,295 +1,222 @@
-import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 
-// --- CONNECT TO GAME SERVER ---
-// Make sure this matches your Render URL exactly
-const socket = io('https://project-k-backend-1.onrender.com');
+// --- CONFIGURATION ---
+// This is your backend link. 
+const BACKEND_URL = "https://project-k-backend-1.onrender.com";
+const socket = io(BACKEND_URL);
 
-// --- STYLES ---
-const styles = {
-  container: { textAlign: 'center', padding: '20px', maxWidth: '400px', margin: '0 auto', color: 'white', fontFamily: 'sans-serif' },
-  input: { padding: '12px', width: '100%', borderRadius: '8px', border: 'none', marginBottom: '10px', boxSizing: 'border-box' },
-  btnGold: { width: '100%', padding: '15px', background: '#fbbf24', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '10px', color: 'black' },
-  btnRed: { width: '100%', padding: '15px', background: '#ef4444', border: 'none', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', marginBottom: '10px', color: 'white' },
-  btnOutline: { width: '100%', padding: '15px', background: 'transparent', border: '2px solid #fbbf24', borderRadius: '8px', fontWeight: 'bold', cursor: 'pointer', color: '#fbbf24' },
-  card: { background: '#1e293b', padding: '20px', borderRadius: '15px', margin: '20px 0', border: '1px solid #334155' },
-  dice: { fontSize: '4rem', margin: '20px' }
-};
-
-// --- 1. HOME ---
-function Home() {
-  const navigate = useNavigate();
-  return (
-    <div style={{...styles.container, paddingTop: '50px'}}>
-      <h1 style={{fontSize:'3rem'}}>PROJECT <span style={{color:'#fbbf24'}}>K</span></h1>
-      <button onClick={() => navigate('/login')} style={styles.btnGold}>LOGIN</button>
-      <button onClick={() => navigate('/register')} style={styles.btnOutline}>REGISTER</button>
-    </div>
-  );
-}
-
-// --- 2. LOGIN ---
-function Login() {
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const navigate = useNavigate();
-
-  const handleLogin = async () => {
-    try {
-      const res = await fetch('https://project-k-backend-1.onrender.com/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone, password })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('user', JSON.stringify(data.user)); 
-        navigate('/dashboard');
-      } else { alert(data.error); }
-    } catch (err) { alert("Server Error"); }
-  };
-
-  return (
-    <div style={styles.container}>
-      <h2 style={{color: '#fbbf24'}}>LOGIN</h2>
-      <input placeholder="Phone" value={phone} onChange={e=>setPhone(e.target.value)} style={styles.input} />
-      <input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} style={styles.input} />
-      <button onClick={handleLogin} style={styles.btnGold}>ENTER</button>
-      <p onClick={() => navigate('/register')} style={{color: '#94a3b8', cursor: 'pointer'}}>No account? Register</p>
-    </div>
-  );
-}
-
-// --- 3. REGISTER ---
-function Register() {
-  const [username, setUsername] = useState('');
-  const [phone, setPhone] = useState('');
-  const [password, setPassword] = useState('');
-  const navigate = useNavigate();
-
-  const handleRegister = async () => {
-    try {
-      const res = await fetch('https://project-k-backend-1.onrender.com/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, phone, password })
-      });
-      if (res.ok) { alert("Success! Login now."); navigate('/login'); }
-      else { const data = await res.json(); alert(data.error); }
-    } catch (err) { alert("Server Error"); }
-  };
-
-  return (
-    <div style={styles.container}>
-      <h2 style={{color: '#fbbf24'}}>REGISTER</h2>
-      <input placeholder="Username" value={username} onChange={e=>setUsername(e.target.value)} style={styles.input} />
-      <input placeholder="Phone" value={phone} onChange={e=>setPhone(e.target.value)} style={styles.input} />
-      <input type="password" placeholder="Password" value={password} onChange={e=>setPassword(e.target.value)} style={styles.input} />
-      <button onClick={handleRegister} style={styles.btnOutline}>JOIN NOW</button>
-      <p onClick={() => navigate('/login')} style={{color: '#94a3b8', cursor: 'pointer'}}>Has account? Login</p>
-    </div>
-  );
-}
-
-// --- 4. DASHBOARD & GAME ---
-function Dashboard() {
-  const navigate = useNavigate();
+function App() {
   const [user, setUser] = useState(null);
-  
-  // NEW: Withdraw State
-  const [withdrawAmount, setWithdrawAmount] = useState('');
-
-  // Game States
-  const [gameState, setGameState] = useState('IDLE'); 
+  const [form, setForm] = useState({ username: '', phone: '', password: '' });
+  const [isLogin, setIsLogin] = useState(true);
+  const [amount, setAmount] = useState('');
+  const [gameState, setGameState] = useState('IDLE'); // IDLE, WAITING, PLAYING
   const [matchId, setMatchId] = useState(null);
-  const [myRoll, setMyRoll] = useState(null);
-  const [opponentRoll, setOpponentRoll] = useState(null);
-  const [gameResult, setGameResult] = useState('');
+  const [roll, setRoll] = useState(null);
 
-  // LOAD USER
   useEffect(() => {
-    const fetchUser = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) return navigate('/login');
-      
-      const res = await fetch('https://project-k-backend-1.onrender.com/me', {
-        headers: { 'Authorization': token }
-      });
-      if (res.ok) {
-        const userData = await res.json();
-        setUser(userData);
-      } else {
-        navigate('/login');
-      }
-    };
-    fetchUser();
-  }, []);
+    // Check if user is already logged in
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    }
 
-  // SOCKET LISTENERS
-  useEffect(() => {
-    socket.on('WAITING', (data) => setGameState('SEARCHING'));
-    
-    socket.on('GAME_START', (data) => {
-      setMatchId(data.matchId);
+    // Game Listeners
+    socket.on('WAITING', () => setGameState('WAITING'));
+    socket.on('GAME_START', ({ matchId }) => {
       setGameState('PLAYING');
-      setMyRoll(null); setOpponentRoll(null); setGameResult('');
-      if(user) setUser(prev => ({...prev, balance: prev.balance - 10})); 
+      setMatchId(matchId);
+      alert("Game Started! Roll the dice!");
     });
-
-    socket.on('ROLL_RESULT', (data) => {
-      if (data.playerId === socket.id) setMyRoll(data.roll);
-      else setOpponentRoll(data.roll);
-    });
-
-    socket.on('GAME_OVER', (data) => {
-      setGameResult(data.message);
-      setGameState('GAME_OVER');
-      setTimeout(() => window.location.reload(), 3000);
+    socket.on('ROLL_RESULT', ({ playerId, roll }) => {
+      setRoll(roll);
+      alert(`Player rolled a ${roll}!`);
     });
 
     return () => socket.off(); 
-  }, [user]);
+  }, []);
 
-  // DEPOSIT FUNCTION
-  const handleDeposit = async () => {
-    if (!user) return;
+  // --- ACTIONS ---
+
+  const handleAuth = async () => {
+    const endpoint = isLogin ? '/login' : '/register';
     try {
-      const res = await fetch('https://project-k-backend-1.onrender.com/deposit', {
+      const res = await fetch(`${BACKEND_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: user.phone, amount: 50 })
+        body: JSON.stringify(form),
       });
       const data = await res.json();
-      if (res.ok) setUser({ ...user, balance: data.newBalance });
-    } catch (err) { alert("Connection Error"); }
-  };
-const withdrawMoney = async () => {
-    // 1. SAFETY CHECK: Get User directly from storage
-    const storedUser = JSON.parse(localStorage.getItem('user'));
-
-    if (!storedUser || !storedUser.phone) {
-      alert("System Error: Phone number missing. Please Logout and Login again.");
-      return;
-    }
-
-    if (!amount) {
-      alert("Please enter an amount!");
-      return;
-    }
-
-    try {
-      // 2. SEND DATA (Make sure this URL matches your real backend!)
-      const res = await fetch('https://project-k-backend-1.onrender.com/withdraw', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          phone: storedUser.phone,  // <--- This is the fix!
-          amount: amount 
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        setBalance(data.newBalance); // Update screen immediately
-        alert("✅ Cash Out Successful!");
-        setAmount(''); // Clear the box
+      
+      if (res.ok) {
+        // If login/register works, save user and update screen
+        const userData = isLogin ? data.user : data;
+        localStorage.setItem('user', JSON.stringify(userData));
+        setUser(userData);
+        alert(`Welcome ${userData.username || 'User'}!`);
       } else {
-        alert("❌ Withdrawal Failed: " + data.message);
+        alert("Error: " + (data.error || data.message || "Something went wrong"));
       }
-    } catch (error) {
-      console.error(error);
-      alert("Connection Error. Check your internet.");
+    } catch (err) {
+      alert("Connection Failed. Check Server.");
     }
   };
 
-  // --- VIEW: GAME SCREEN ---
-  if (gameState === 'PLAYING' || gameState === 'GAME_OVER') {
+  const logout = () => {
+    localStorage.removeItem('user');
+    setUser(null);
+    setGameState('IDLE');
+  };
+
+  const withdrawMoney = async () => {
+    if (!user || !user.phone) {
+      alert("Error: Please Logout and Login again to refresh your data.");
+      return;
+    }
+    if (!amount) return alert("Enter an amount first!");
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: user.phone, amount: amount }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Update balance on screen
+        const updatedUser = { ...user, balance: data.newBalance };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        setAmount('');
+        alert("✅ Cash Out Successful!");
+      } else {
+        alert("❌ Failed: " + data.message);
+      }
+    } catch (err) {
+      alert("Server Connection Error");
+    }
+  };
+
+  const depositMoney = async () => {
+    if (!amount) return alert("Enter an amount");
+    // Simple deposit simulation
+    try {
+       const res = await fetch(`${BACKEND_URL}/deposit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: user.phone, amount: amount }),
+      });
+      const data = await res.json();
+      const updatedUser = { ...user, balance: data.newBalance };
+      setUser(updatedUser);
+      localStorage.setItem('user', JSON.stringify(updatedUser));
+      setAmount('');
+      alert("Deposit Successful (Simulated)");
+    } catch(err) {
+      alert("Deposit Error");
+    }
+  };
+
+  const findMatch = () => {
+    socket.emit('FIND_MATCH', { playerId: user.id });
+  };
+
+  const rollDice = () => {
+    socket.emit('ROLL_DICE', { matchId });
+  };
+
+  // --- RENDER SCREEN ---
+
+  if (!user) {
+    // LOGIN / REGISTER SCREEN
     return (
-      <div style={styles.container}>
-        <h2 style={{color: '#fbbf24'}}>MATCH STARTED</h2>
-        <div style={{display:'flex', justifyContent:'space-around', margin:'30px 0'}}>
-          <div>
-            <p>YOU</p>
-            <div style={styles.dice}>{myRoll || '❓'}</div>
-          </div>
-          <div>
-            <p>OPPONENT</p>
-            <div style={styles.dice}>{opponentRoll || '❓'}</div>
-          </div>
+      <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#1a1a1a', color: 'white', minHeight: '100vh' }}>
+        <h1>Dice King 🎲</h1>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '300px', margin: 'auto' }}>
+          {!isLogin && (
+            <input 
+              placeholder="Username" 
+              onChange={(e) => setForm({...form, username: e.target.value})} 
+              style={{ padding: '10px' }}
+            />
+          )}
+          <input 
+            placeholder="Phone Number" 
+            onChange={(e) => setForm({...form, phone: e.target.value})} 
+            style={{ padding: '10px' }}
+          />
+          <input 
+            type="password" 
+            placeholder="Password" 
+            onChange={(e) => setForm({...form, password: e.target.value})} 
+            style={{ padding: '10px' }}
+          />
+          <button onClick={handleAuth} style={{ padding: '10px', background: '#efb810', border: 'none', fontWeight: 'bold' }}>
+            {isLogin ? "ENTER" : "REGISTER"}
+          </button>
+          <p onClick={() => setIsLogin(!isLogin)} style={{ color: '#ccc', cursor: 'pointer' }}>
+            {isLogin ? "Need an account? Register" : "Have an account? Login"}
+          </p>
         </div>
-
-        {gameState === 'PLAYING' && !myRoll && (
-          <button onClick={rollDice} style={styles.btnGold}>ROLL DICE 🎲</button>
-        )}
-        
-        {gameState === 'PLAYING' && myRoll && !opponentRoll && (
-          <p>Waiting for opponent...</p>
-        )}
-
-        {gameState === 'GAME_OVER' && (
-          <div style={styles.card}>
-            <h1 style={{color: gameResult.includes('Wins') ? '#fbbf24' : 'white'}}>{gameResult}</h1>
-            <p>Returning to lobby...</p>
-          </div>
-        )}
       </div>
     );
   }
 
-  // --- VIEW: LOBBY ---
+  // DASHBOARD SCREEN
   return (
-    <div style={styles.container}>
-      <h1 style={{color: '#fbbf24'}}>HELLO, {user.username}</h1>
-      
-      {/* BALANCE CARD */}
-      <div style={styles.card}>
-        <p style={{color: '#94a3b8'}}>Balance</p>
-        <h2 style={{fontSize: '3rem', margin: '10px 0', color: 'white'}}>GHS {user.balance}</h2>
-        <button onClick={handleDeposit} style={{...styles.btnOutline, fontSize:'0.9rem', padding:'10px'}}>+ DEPOSIT 50 GHS</button>
-      </div>
+    <div style={{ padding: '20px', textAlign: 'center', backgroundColor: '#121212', color: 'white', minHeight: '100vh' }}>
+      <h1 style={{ color: '#efb810' }}>{user.username}</h1>
+      <p>Balance</p>
+      <h2 style={{ fontSize: '40px', margin: '10px 0' }}>GHS {user.balance}</h2>
 
-      {/* NEW: WITHDRAW CARD */}
-      <div style={styles.card}>
-        <h3 style={{color: '#ef4444'}}>📉 Withdraw</h3>
+      {/* WITHDRAW / DEPOSIT AREA */}
+      <div style={{ backgroundColor: '#222', padding: '15px', borderRadius: '10px', margin: '20px 0' }}>
         <input 
           type="number" 
-          placeholder="Amount (GHS)" 
-          value={withdrawAmount}
-          onChange={(e) => setWithdrawAmount(e.target.value)}
-          style={{...styles.input, marginBottom: '5px'}} 
+          placeholder="Amount" 
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          style={{ padding: '10px', width: '60%', marginRight: '10px' }}
         />
-        <button onClick={withdrawMoney} style={styles.btnRed}>CASH OUT</button>
+        <div style={{ marginTop: '10px', display: 'flex', gap: '10px', justifyContent: 'center' }}>
+          <button onClick={depositMoney} style={{ padding: '10px 20px', background: 'green', color: 'white', border: 'none' }}>
+            Deposit
+          </button>
+          <button onClick={withdrawMoney} style={{ padding: '10px 20px', background: 'red', color: 'white', border: 'none' }}>
+            Cash Out
+          </button>
+        </div>
       </div>
 
-      {gameState === 'IDLE' && (
-        <button onClick={findMatch} style={styles.btnGold}>FIND MATCH (GHS 10)</button>
-      )}
+      {/* GAME AREA */}
+      <div style={{ marginTop: '40px' }}>
+        {gameState === 'IDLE' && (
+          <button onClick={findMatch} style={{ width: '100%', padding: '15px', background: '#efb810', border: 'none', fontWeight: 'bold', fontSize: '18px' }}>
+            FIND MATCH (GHS 10)
+          </button>
+        )}
+        
+        {gameState === 'WAITING' && <h3>🔎 Searching for player...</h3>}
+        
+        {gameState === 'PLAYING' && (
+          <div>
+            <h3>Match Found! ⚔️</h3>
+            <div style={{ fontSize: '50px', margin: '20px' }}>
+              {roll ? `🎲 ${roll}` : "❓"}
+            </div>
+            <button onClick={rollDice} style={{ padding: '15px', background: 'blue', color: 'white', border: 'none', borderRadius: '5px' }}>
+              ROLL DICE
+            </button>
+          </div>
+        )}
+      </div>
 
-      {gameState === 'SEARCHING' && (
-        <div style={styles.card}>
-          <h3>🔍 Searching for Opponent...</h3>
-          <p>Please wait...</p>
-        </div>
-      )}
-
-      <br/><br/>
-      <button onClick={() => {localStorage.clear(); navigate('/login')}} style={{color:'#94a3b8', background:'transparent', border:'none', cursor:'pointer'}}>LOGOUT</button>
+      <button onClick={logout} style={{ marginTop: '50px', background: 'transparent', border: 'none', color: '#555' }}>
+        LOGOUT
+      </button>
     </div>
   );
 }
 
-export default function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-      </Routes>
-    </BrowserRouter>
-  );
-}
+export default App;
