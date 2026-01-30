@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import io from 'socket.io-client';
 import './App.css';
 
-const BACKEND_URL = "https://project-k-backend-1.onrender.com";
+const BACKEND_URL = "https://project-k-backend-1.onrender.com"; // CHECK YOUR URL
 const socket = io(BACKEND_URL);
 
 function App() {
@@ -11,63 +11,77 @@ function App() {
   const [isLogin, setIsLogin] = useState(true);
   const [amount, setAmount] = useState('');
   
-  // Game State
-  const [gameState, setGameState] = useState('IDLE'); // IDLE, WAITING, PLAYING, FINISHED
+  // Game Vars
+  const [gameState, setGameState] = useState('IDLE'); // IDLE, WAITING, PLAYING
   const [matchId, setMatchId] = useState(null);
   const [myRoll, setMyRoll] = useState(null);
-  const [statusMsg, setStatusMsg] = useState("");
+  const [opRoll, setOpRoll] = useState(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('user');
     if (storedUser) setUser(JSON.parse(storedUser));
 
+    // SOCKET LISTENERS
+    socket.on('WAITING', () => setGameState('WAITING'));
+
     socket.on('GAME_START', ({ matchId }) => {
       setGameState('PLAYING');
       setMatchId(matchId);
       setMyRoll(null);
-      setStatusMsg("Game Started! ROLL YOUR DICE!");
-      // Deduct 10 immediately visually
+      setOpRoll(null);
+      alert("MATCH STARTED! -10 GHS");
+      // Update balance visually
       updateLocalBalance(-10);
     });
 
-    socket.on('MY_ROLL', ({ roll }) => {
-      setMyRoll(roll);
-      setStatusMsg("Waiting for opponent...");
-    });
-
-    socket.on('OPPONENT_ROLLED', ({ playerId }) => {
-      if (playerId !== socket.id) setStatusMsg("Opponent has rolled! Your turn!");
-    });
-
-    socket.on('GAME_RESULT', ({ p1Roll, p2Roll, winner }) => {
-      setGameState('FINISHED');
-      const win = winner === user.phone;
-      const draw = !winner;
-      
-      if (win) {
-        setStatusMsg(`YOU WON! (+20 GHS)`);
-        updateLocalBalance(20);
-      } else if (draw) {
-        setStatusMsg("DRAW! (+10 GHS)");
-        updateLocalBalance(10);
+    socket.on('ROLL_RESULT', ({ playerId, roll }) => {
+      if (playerId === socket.id) {
+        setMyRoll(roll);
       } else {
-        setStatusMsg("YOU LOST!");
+        setOpRoll(roll);
       }
-
-      setTimeout(() => setGameState('IDLE'), 4000);
     });
 
-    socket.on('ERROR', (data) => alert(data.message));
     return () => socket.off();
-  }, [user]);
+  }, []);
 
-  // Helper to update balance on screen immediately
+  // Check Winner Helper
+  useEffect(() => {
+    if (myRoll && opRoll) {
+      setTimeout(() => {
+        if (myRoll > opRoll) {
+          alert("YOU WON! +20 GHS");
+          updateLocalBalance(20);
+          // Send update to server (simplified for now)
+          updateServerBalance(20);
+        } else if (opRoll > myRoll) {
+          alert("YOU LOST!");
+        } else {
+          alert("DRAW! +10 GHS");
+          updateLocalBalance(10);
+          updateServerBalance(10);
+        }
+        setGameState('IDLE');
+      }, 1000);
+    }
+  }, [myRoll, opRoll]);
+
+  // --- ACTIONS ---
+
   const updateLocalBalance = (change) => {
-    if (!user) return;
+    if(!user) return;
     const newBal = parseFloat(user.balance) + change;
-    const updated = { ...user, balance: newBal };
-    setUser(updated);
-    localStorage.setItem('user', JSON.stringify(updated));
+    const u = { ...user, balance: newBal };
+    setUser(u);
+    localStorage.setItem('user', JSON.stringify(u));
+  };
+
+  const updateServerBalance = async (amount) => {
+    await fetch(`${BACKEND_URL}/balance-update`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ phone: user.phone, amount, type: 'deposit' })
+    });
   };
 
   const handleAuth = async () => {
@@ -98,14 +112,11 @@ function App() {
       const data = await res.json();
       if (data.success) {
         alert("Success!");
-        // FORCE UPDATE SCREEN
-        const updated = { ...user, balance: data.newBalance };
-        setUser(updated);
-        localStorage.setItem('user', JSON.stringify(updated));
+        const u = { ...user, balance: data.newBalance };
+        setUser(u);
+        localStorage.setItem('user', JSON.stringify(u));
         setAmount('');
-      } else {
-        alert("Failed: " + data.message);
-      }
+      } else alert("Failed");
     } catch (e) { alert("Error"); }
   };
 
@@ -141,19 +152,18 @@ function App() {
       <div style={{marginTop: 30}}>
         {gameState === 'IDLE' && <button className="btn-gold" onClick={()=>socket.emit('FIND_MATCH', {phone: user.phone})}>FIND MATCH (10 GHS)</button>}
         
-        {gameState === 'WAITING' && <h3 className="gold-text">Waiting for opponent...</h3>}
+        {gameState === 'WAITING' && <h3 className="gold-text">Waiting for Player 2...</h3>}
         
         {gameState === 'PLAYING' && (
           <div>
-            <h3>{statusMsg}</h3>
-            <div className="dice-box">
-               {myRoll ? <span style={{fontSize:50}}>🎲 {myRoll}</span> : <span className="shaking" style={{fontSize:50}}>🎲</span>}
+            <h3>GAME ON!</h3>
+            <div style={{display:'flex', justifyContent:'space-around', margin: '20px 0'}}>
+              <div>You: {myRoll ? myRoll : "?"}</div>
+              <div>Opponent: {opRoll ? opRoll : "?"}</div>
             </div>
             {!myRoll && <button className="btn-gold" onClick={()=>socket.emit('ROLL_DICE', {matchId})}>ROLL DICE</button>}
           </div>
         )}
-
-        {gameState === 'FINISHED' && <h2 className="gold-text">{statusMsg}</h2>}
       </div>
     </div>
   );
